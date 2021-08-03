@@ -83,6 +83,7 @@ namespace NativeWebSocket
 {
     public delegate void WebSocketOpenEventHandler();
     public delegate void WebSocketMessageEventHandler(byte[] data);
+    public delegate void WebSocketDataEventHandler(byte[] data);
     public delegate void WebSocketErrorEventHandler(string errorMsg);
     public delegate void WebSocketCloseEventHandler(WebSocketCloseCode closeCode);
 
@@ -117,6 +118,7 @@ namespace NativeWebSocket
     {
         event WebSocketOpenEventHandler OnOpen;
         event WebSocketMessageEventHandler OnMessage;
+        event WebSocketDataEventHandler OnData;
         event WebSocketErrorEventHandler OnError;
         event WebSocketCloseEventHandler OnClose;
 
@@ -226,6 +228,7 @@ namespace NativeWebSocket
 
     public event WebSocketOpenEventHandler OnOpen;
     public event WebSocketMessageEventHandler OnMessage;
+    public event WebSocketDataEventHandler OnData;
     public event WebSocketErrorEventHandler OnError;
     public event WebSocketCloseEventHandler OnClose;
 
@@ -351,6 +354,10 @@ namespace NativeWebSocket
       this.OnMessage?.Invoke (data);
     }
 
+    public void DelegateOnDataEvent (byte[] data) {
+      this.OnData?.Invoke (data);
+    }
+
     public void DelegateOnErrorEvent (string errorMsg) {
       this.OnError?.Invoke (errorMsg);
     }
@@ -363,10 +370,11 @@ namespace NativeWebSocket
 
 #else
 
-    public class WebSocket : IWebSocket
+  public class WebSocket : IWebSocket
     {
         public event WebSocketOpenEventHandler OnOpen;
         public event WebSocketMessageEventHandler OnMessage;
+        public event WebSocketDataEventHandler OnData;
         public event WebSocketErrorEventHandler OnError;
         public event WebSocketCloseEventHandler OnClose;
 
@@ -615,7 +623,7 @@ namespace NativeWebSocket
         private Mutex m_MessageListMutex = new Mutex();
         private List<byte[]> m_MessageList = new List<byte[]>();
 
-        // simple dispatcher for queued messages.
+        // simple dispatcher for queued message messages.
         public void DispatchMessageQueue()
         {
             // lock mutex, copy queue content and clear the queue.
@@ -630,6 +638,26 @@ namespace NativeWebSocket
             {
                 OnMessage?.Invoke(bytes);
             }
+        }
+
+        private Mutex m_DataListMutex = new Mutex();
+        private List<byte[]> m_DataList = new List<byte[]>();
+
+        // simple dispatcher for queued data messages.
+        public void DispatchDataQueue()
+        {
+          // lock mutex, copy queue content and clear the queue.
+          m_DataListMutex.WaitOne();
+          List<byte[]> dataListCopy = new List<byte[]>();
+          dataListCopy.AddRange(m_DataList);
+          m_DataList.Clear();
+          // release mutex to allow the websocket to add new messages
+          m_DataListMutex.ReleaseMutex();
+
+          foreach (byte[] bytes in dataListCopy)
+          {
+            OnData?.Invoke(bytes);
+          }
         }
 
         public async Task Receive()
@@ -669,9 +697,9 @@ namespace NativeWebSocket
                         }
                         else if (result.MessageType == WebSocketMessageType.Binary)
                         {
-                            m_MessageListMutex.WaitOne();
-                            m_MessageList.Add(ms.ToArray());
-                            m_MessageListMutex.ReleaseMutex();
+                            m_DataListMutex.WaitOne();
+                            m_DataList.Add(ms.ToArray());
+                            m_DataListMutex.ReleaseMutex();
                         }
                         else if (result.MessageType == WebSocketMessageType.Close)
                         {
@@ -720,6 +748,7 @@ namespace NativeWebSocket
     /* Delegates */
     public delegate void OnOpenCallback (int instanceId);
     public delegate void OnMessageCallback (int instanceId, System.IntPtr msgPtr, int msgSize);
+    public delegate void OnDataCallback(int instanceId, System.IntPtr msgPtr, int msgSize);
     public delegate void OnErrorCallback (int instanceId, System.IntPtr errorPtr);
     public delegate void OnCloseCallback (int instanceId, int closeCode);
 
@@ -740,6 +769,9 @@ namespace NativeWebSocket
     public static extern void WebSocketSetOnMessage (OnMessageCallback callback);
 
     [DllImport ("__Internal")]
+    public static extern void WebSocketSetOnData (OnDataCallback callback);
+
+    [DllImport ("__Internal")]
     public static extern void WebSocketSetOnError (OnErrorCallback callback);
 
     [DllImport ("__Internal")]
@@ -755,6 +787,7 @@ namespace NativeWebSocket
 
       WebSocketSetOnOpen (DelegateOnOpenEvent);
       WebSocketSetOnMessage (DelegateOnMessageEvent);
+      WebSocketSetOnData(DelegateOnDataEvent);
       WebSocketSetOnError (DelegateOnErrorEvent);
       WebSocketSetOnClose (DelegateOnCloseEvent);
 
@@ -799,6 +832,20 @@ namespace NativeWebSocket
 
     }
 
+    [MonoPInvokeCallback (typeof (OnDataCallback))]
+    public static void DelegateOnDataEvent (int instanceId, System.IntPtr msgPtr, int msgSize) {
+
+      WebSocket instanceRef;
+
+      if (instances.TryGetValue (instanceId, out instanceRef)) {
+        byte[] msg = new byte[msgSize];
+        Marshal.Copy (msgPtr, msg, 0, msgSize);
+
+        instanceRef.DelegateOnDataEvent (msg);
+      }
+
+    }
+
     [MonoPInvokeCallback (typeof (OnErrorCallback))]
     public static void DelegateOnErrorEvent (int instanceId, System.IntPtr errorPtr) {
 
@@ -825,12 +872,12 @@ namespace NativeWebSocket
     }
 #endif
 
-        /// <summary>
-        /// Create WebSocket client instance
-        /// </summary>
-        /// <returns>The WebSocket instance.</returns>
-        /// <param name="url">WebSocket valid URL.</param>
-        public static WebSocket CreateInstance(string url)
+    /// <summary>
+    /// Create WebSocket client instance
+    /// </summary>
+    /// <returns>The WebSocket instance.</returns>
+    /// <param name="url">WebSocket valid URL.</param>
+    public static WebSocket CreateInstance(string url)
         {
             return new WebSocket(url);
         }

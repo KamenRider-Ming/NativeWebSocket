@@ -80,6 +80,7 @@ var LibraryWebSocket = {
 		/* Event listeners */
 		onOpen: null,
 		onMesssage: null,
+    onData: null,
 		onError: null,
 		onClose: null,
 
@@ -106,6 +107,17 @@ var LibraryWebSocket = {
 	WebSocketSetOnMessage: function(callback) {
 
 		webSocketState.onMessage = callback;
+
+	},
+
+  	/**
+	 * Set onData callback
+	 *
+	 * @param callback Reference to C# static function
+	 */
+	WebSocketSetOnData: function(callback) {
+
+		webSocketState.onData = callback;
 
 	},
 
@@ -219,10 +231,17 @@ var LibraryWebSocket = {
 		instance.ws.onmessage = function(ev) {
 
 			if (webSocketState.debug)
-				console.log("[JSLIB WebSocket] Received message:", ev.data);
+				console.log("[JSLIB WebSocket] Received onmessage:", ev.data);
 
-			if (webSocketState.onMessage === null)
+      var isBinary = !!(ev.data instanceof ArrayBuffer);
+
+			if (!isBinary && webSocketState.onMessage === null) {
 				return;
+      }
+
+      if (isBinary && webSocketState.onData === null) {
+        return;
+      }
 
 			if (ev.data instanceof ArrayBuffer) {
 
@@ -232,7 +251,7 @@ var LibraryWebSocket = {
 				HEAPU8.set(dataBuffer, buffer);
 
 				try {
-					Runtime.dynCall('viii', webSocketState.onMessage, [ instanceId, buffer, dataBuffer.length ]);
+					Runtime.dynCall('viii', webSocketState.onData, [ instanceId, buffer, dataBuffer.length ]);
 				} finally {
 					_free(buffer);
 				}

@@ -13,7 +13,7 @@ public class Connection : MonoBehaviour
   async void Start()
   {
     // websocket = new WebSocket("ws://echo.websocket.org");
-    websocket = new WebSocket("ws://localhost:8080");
+    websocket = new WebSocket("ws://localhost:3000");
 
     websocket.OnOpen += () =>
     {
@@ -37,6 +37,13 @@ public class Connection : MonoBehaviour
       Debug.Log("Received OnMessage! (" + bytes.Length + " bytes) " + message);
     };
 
+    websocket.OnData += (bytes) =>
+    {
+      // Reading a binary message
+      var message = System.Text.Encoding.UTF8.GetString(bytes);
+      Debug.Log("Received OnData! (" + bytes.Length + " bytes) " + message);
+    };
+
     // Keep sending messages at every 0.3s
     InvokeRepeating("SendWebSocketMessage", 0.0f, 0.3f);
 
@@ -47,6 +54,7 @@ public class Connection : MonoBehaviour
   {
     #if !UNITY_WEBGL || UNITY_EDITOR
       websocket.DispatchMessageQueue();
+    websocket.DispatchDataQueue();
     #endif
   }
 
