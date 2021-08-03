@@ -68,6 +68,16 @@ public class Connection : MonoBehaviour
       // var message = System.Text.Encoding.UTF8.GetString(bytes);
       // Debug.Log("OnMessage! " + message);
     };
+    
+    websocket.OnData += (bytes) =>
+    {
+      Debug.Log("OnData!");
+      Debug.Log(bytes);
+
+      // getting the message as binary string
+      // var message = System.Text.Encoding.UTF8.GetString(bytes);
+      // Debug.Log("OnData! " + message);
+    };
 
     // Keep sending messages at every 0.3s
     InvokeRepeating("SendWebSocketMessage", 0.0f, 0.3f);
@@ -80,6 +90,7 @@ public class Connection : MonoBehaviour
   {
     #if !UNITY_WEBGL || UNITY_EDITOR
       websocket.DispatchMessageQueue();
+      websocket.DispatchDataQueue();
     #endif
   }
 
